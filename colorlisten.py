@@ -6,6 +6,7 @@ import itertools
 from scipy import interpolate
 from operator import itemgetter
 from matplotlib import pyplot as plt
+import threading
 
 # Audio parts were borrowed from
 # http://davywybiral.blogspot.be/2010/09/procedural-music-with-pyaudio-and-numpy.html
@@ -33,6 +34,7 @@ def audiospectrum(hist):
     # these are the waves we need to compose
     sines = np.sin(xv*yv*math.pi*2/rate)
     
+    hist = hist / max(hist)
     amplitude = np.repeat(np.array(hist)[:,np.newaxis], duration*rate, axis=1)
     # set the amplitudes according to the histogram values
     return sum(amplitude*sines)
@@ -41,6 +43,17 @@ p = pyaudio.PyAudio()
 stream = p.open(format=pyaudio.paFloat32, channels=1, rate=44100, output=1)
 
 cap = cv2.VideoCapture(0)
+vals = np.linspace(0,1,256)
+
+running = True
+
+def send_audio():
+    while running:
+        samples = audiospectrum(vals)
+        stream.write(samples.astype(np.float32).tostring())
+
+audio_thread = threading.Thread(target=send_audio)
+audio_thread.start()
 
 while(True):
     # Capture frame-by-frame
@@ -62,8 +75,6 @@ while(True):
     histpts[:,1] = vals / frame.shape[0]
 
     # Play audio sample
-    samples = audiospectrum(vals)
-    stream.write(samples.astype(np.float32).tostring())
 
     cv2.polylines(frame, np.int32([histpts]), False, (255,255,255))
 
@@ -76,6 +87,8 @@ while(True):
 # When everything done, release the capture, close the audiostream
 cap.release()
 cv2.destroyAllWindows()
+
+running = False
 
 stream.close()
 p.terminate()
